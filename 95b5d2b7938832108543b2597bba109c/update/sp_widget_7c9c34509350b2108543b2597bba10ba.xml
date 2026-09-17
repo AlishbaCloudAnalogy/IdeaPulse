@@ -1,0 +1,527 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[api.controller = function($scope, $element, $timeout, $window) {
+  var c = this;
+  var scroller;
+  var recordLinkBase = '';
+
+  if ($window && $window.location) {
+    var loc = $window.location;
+    var origin = loc.origin;
+
+    if (!origin && loc.protocol && loc.host) {
+      origin = loc.protocol + '//' + loc.host;
+    }
+
+    if (origin) {
+      recordLinkBase = origin + '/now/nav/ui/classic/params/target/x_snc_hack4good_0_hack4good_proposal.do?sys_id=';
+    }
+  }
+
+  c.canScrollLeft = false;
+  c.canScrollRight = false;
+
+  c.cards = [];
+  c.hasCards = false;
+
+  function valueOf(field) {
+    if (!field) {
+      return '';
+    }
+    var displayValue = field.display_value;
+    if (displayValue) {
+      return displayValue;
+    }
+    var rawValue = field.value;
+    if (rawValue) {
+      return rawValue;
+    }
+    return '';
+  }
+
+  function firstAvailable(submission, keys) {
+    for (var i = 0; i < keys.length; i++) {
+      var text = valueOf(submission[keys[i]]);
+      if (text) {
+        return text;
+      }
+    }
+    return '';
+  }
+
+  function truncateText(value, maxLength) {
+    if (!value) {
+      return '';
+    }
+    var text = value.toString().replace(/^\s+|\s+$/g, '');
+    if (!maxLength || text.length <= maxLength) {
+      return text;
+    }
+    var shortened = text.substring(0, Math.max(maxLength - 3, 1)).replace(/\s+$/g, '');
+    return shortened + '...';
+  }
+
+  function buildRecordLink(sysId) {
+    if (!sysId || !recordLinkBase) {
+      return '';
+    }
+    return recordLinkBase + sysId;
+  }
+
+  function buildCards() {
+    var submissions = (c.data && Array.isArray(c.data.submissions)) ? c.data.submissions : [];
+    return submissions.map(function(submission, index) {
+      var sysId = valueOf(submission.sys_id);
+      var title = firstAvailable(submission, ['project_name', 'focus_area', 'problem_statement']) || 'Submitted proposal';
+      title = truncateText(title, 120);
+
+      var summary = valueOf(submission.problem_statement);
+      if (!summary) {
+        summary = firstAvailable(submission, ['project_name']);
+      }
+      summary = truncateText(summary, 320);
+
+      var focus = truncateText(firstAvailable(submission, ['focus_area']), 80);
+      var submittedBy = truncateText(firstAvailable(submission, ['sys_created_by', 'submitted_by', 'u_submitted_by']), 80);
+
+      var card = {
+        id: index + 1,
+        title: title,
+        summary: summary,
+        focus: focus,
+        createdOn: valueOf(submission.sys_created_on),
+        recordLink: buildRecordLink(sysId)
+      };
+
+      return card;
+    }).filter(function(card) {
+      return card.title || card.focus || card.summary;
+    });
+  }
+
+  function refreshCards() {
+    c.cards = buildCards();
+    c.hasCards = c.cards.length > 0;
+    setupScroller();
+  }
+
+  c.scroll = function(direction) {
+    if (!scroller) {
+      return;
+    }
+    var distance = Math.max(scroller.clientWidth * 0.8, 240);
+    scroller.scrollLeft += distance * direction;
+    $timeout(updateScrollState, 250);
+  };
+
+  function updateScrollState() {
+    if (!scroller) {
+      c.canScrollLeft = false;
+      c.canScrollRight = false;
+      return;
+    }
+    var tolerance = 5;
+    var maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+    c.canScrollLeft = scroller.scrollLeft > tolerance;
+    c.canScrollRight = scroller.scrollLeft < (maxScrollLeft - tolerance);
+    $scope.$applyAsync();
+  }
+
+  function teardownScroller() {
+    if (scroller) {
+      scroller.removeEventListener('scroll', updateScrollState);
+      scroller = null;
+    }
+  }
+
+  function setupScroller() {
+    $timeout(function() {
+      teardownScroller();
+      scroller = $element[0].querySelector('.ideapulse-submissions-track');
+      if (!scroller) {
+        updateScrollState();
+        return;
+      }
+      scroller.scrollLeft = 0;
+      updateScrollState();
+      scroller.addEventListener('scroll', updateScrollState);
+    }, 0);
+  }
+
+  $scope.$watch(function() {
+    return c.data && c.data.submissions;
+  }, function() {
+    refreshCards();
+  }, true);
+
+  $scope.$on('$destroy', function() {
+    teardownScroller();
+  });
+
+  refreshCards();
+};]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.ideapulse-submissions {
+  position: relative;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px 64px;
+  color: #1f2933;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
+}
+
+.ideapulse-submissions-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.ideapulse-submissions-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ideapulse-submissions-intro {
+  margin: 0;
+  color: #52606d;
+  font-size: 14px;
+}
+
+.ideapulse-submissions-track-wrapper {
+  position: relative;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.ideapulse-submissions-track-wrapper::before,
+.ideapulse-submissions-track-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 48px;
+  height: 100%;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  opacity: 0;
+  z-index: 1;
+}
+
+.ideapulse-submissions-track-wrapper::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.ideapulse-submissions-track-wrapper::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.ideapulse-submissions-track-wrapper.show-left::before {
+  opacity: 1;
+}
+
+.ideapulse-submissions-track-wrapper.show-right::after {
+  opacity: 1;
+}
+
+.ideapulse-submissions-track {
+  display: flex;
+  width: 100%;
+  gap: 20px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scroll-behavior: smooth;
+  box-sizing: border-box;
+}
+
+.ideapulse-submissions-track:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+.ideapulse-submission-card {
+  min-width: 280px;
+  max-width: 320px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #dce3f0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.ideapulse-submission-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  color: #52606d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ideapulse-submission-number {
+  font-weight: 600;
+  color: #1d4ed8;
+}
+
+.ideapulse-submission-date {
+  font-weight: 500;
+}
+
+.ideapulse-submission-number a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ideapulse-submission-number a:hover {
+  text-decoration: underline;
+}
+
+.ideapulse-submission-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 2.8em;
+}
+
+.ideapulse-submission-summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #334155;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 4.5em;
+}
+
+.ideapulse-submission-summary.empty {
+  font-style: italic;
+  color: #64748b;
+  display: block;
+  max-height: none;
+}
+
+.ideapulse-submission-tags {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ideapulse-submission-focus {
+  display: inline-flex;
+  align-items: center;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ideapulse-submission-submitter {
+  font-size: 12px;
+  color: #475569;
+}
+
+.ideapulse-submissions-scroll {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: #1d4ed8;
+  color: #ffffff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 18px rgba(29, 78, 216, 0.3);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease, opacity 0.2s ease;
+  z-index: 2;
+}
+
+.ideapulse-submissions-scroll:hover {
+  background: #1e40af;
+}
+
+.ideapulse-submissions-scroll:disabled {
+  background: #cbd5f5;
+  color: #ffffff;
+  cursor: default;
+  box-shadow: none;
+  opacity: 0.5;
+}
+
+.ideapulse-submissions-scroll.left {
+  left: 12px;
+}
+
+.ideapulse-submissions-scroll.right {
+  right: 12px;
+}
+
+.ideapulse-submissions-scroll .glyphicon {
+  font-size: 14px;
+}
+
+.ideapulse-submissions-track::-webkit-scrollbar {
+  height: 8px;
+}
+
+.ideapulse-submissions-track::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ideapulse-submissions-track::-webkit-scrollbar-thumb {
+  background: #cbd5f5;
+  border-radius: 4px;
+}
+
+.ideapulse-submissions-empty {
+  border: 1px dashed #cbd5f5;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #52606d;
+  background: #f1f5f9;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .ideapulse-submissions {
+    padding: 20px 32px;
+  }
+
+  .ideapulse-submission-card {
+    min-width: 240px;
+  }
+}
+</css>
+        <data_table>sp_instance</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list/>
+        <has_preview>false</has_preview>
+        <id>ideapulse_submissions</id>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>H4G Submissions</name>
+        <option_schema/>
+        <public>false</public>
+        <roles/>
+        <script><![CDATA[(function () {
+  // Options (optional): set a max in the widget instance
+  var MAX = parseInt(options.max_results || 20, 10);
+
+  data.submissions = [];
+
+  var gr = new GlideRecord('x_snc_hack4good_0_hack4good_proposal');
+  gr.orderByDesc('sys_created_on');
+  gr.setLimit(MAX);
+  gr.query();
+
+  while (gr.next()) {
+    // Build a minimal, UI-friendly shape
+    var rec = {
+      sys_id: gr.getUniqueValue(),
+      created_on: gr.getValue('sys_created_on'),
+      project_name: gr.getDisplayValue('project_name') || gr.getValue('project_name') || '',
+      focus_area: gr.getDisplayValue('focus_area') || gr.getValue('focus_area') || '',
+      problem_statement: gr.getDisplayValue('problem_statement') || gr.getValue('problem_statement') || ''
+    };
+
+    // Skip records with no project name (optional guard)
+    if (!rec.project_name) continue;
+
+    data.submissions.push(rec);
+  }
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>alishba.khan</sys_created_by>
+        <sys_created_on>2025-09-26 02:19:58</sys_created_on>
+        <sys_id>7c9c34509350b2108543b2597bba10ba</sys_id>
+        <sys_mod_count>13</sys_mod_count>
+        <sys_name>H4G Submissions</sys_name>
+        <sys_package display_value="IdeaPulse" source="x_snc_hack4good_0">95b5d2b7938832108543b2597bba109c</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="IdeaPulse">95b5d2b7938832108543b2597bba109c</sys_scope>
+        <sys_update_name>sp_widget_7c9c34509350b2108543b2597bba10ba</sys_update_name>
+        <sys_updated_by>alishba.khan</sys_updated_by>
+        <sys_updated_on>2025-09-28 19:36:57</sys_updated_on>
+        <template><![CDATA[<div class="ideapulse-submissions" role="region" aria-label="Submissions carousel">
+  <div class="ideapulse-submissions-header">
+    <h3 class="ideapulse-submissions-title">Proposal carousel</h3>
+    <p class="ideapulse-submissions-intro" ng-if="c.hasCards">Browse IdeaPulse idea submissions.</p>
+  </div>
+  <div class="ideapulse-submissions-empty" ng-if="!c.hasCards">
+    <p>No submissions found yet.</p>
+  </div>
+  <div class="ideapulse-submissions-track-wrapper" ng-if="c.hasCards" ng-class="{'show-left': c.canScrollLeft, 'show-right': c.canScrollRight}">
+    <button type="button" class="ideapulse-submissions-scroll left" ng-click="c.scroll(-1)" ng-disabled="!c.canScrollLeft" aria-label="Scroll left">
+      <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span>
+    </button>
+    <div class="ideapulse-submissions-track" tabindex="0" role="list">
+      <article class="ideapulse-submission-card" role="listitem" ng-repeat="submission in c.cards track by submission.id">
+        <div class="ideapulse-submission-meta">
+          <span class="ideapulse-submission-number" ng-if="submission.title">
+            <a ng-if="submission.recordLink" ng-href="{{::submission.recordLink}}" ng-attr-target="_new" rel="noopener">{{::submission.title}}</a>
+            <span ng-if="!submission.recordLink">{{::submission.title}}</span>
+          </span>
+          <span class="ideapulse-submission-date" ng-if="submission.createdOn">Submitted {{::submission.createdOn}}</span>
+        </div>
+        <h4 class="ideapulse-submission-name">{{::submission.title}}</h4>
+        <p class="ideapulse-submission-summary" ng-if="submission.summary">{{::submission.summary}}</p>
+        <p class="ideapulse-submission-summary empty" ng-if="!submission.summary">No description provided.</p>
+        <div class="ideapulse-submission-tags" ng-if="submission.focus">
+          <span class="ideapulse-submission-focus" ng-if="submission.focus">{{::submission.focus}}</span>
+        </div>
+      </article>
+    </div>
+    <button type="button" class="ideapulse-submissions-scroll right" ng-click="c.scroll(1)" ng-disabled="!c.canScrollRight" aria-label="Scroll right">
+      <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span>
+    </button>
+  </div>
+</div>
+<BR>]]></template>
+    </sp_widget>
+    <sys_es_latest_script action="INSERT_OR_UPDATE">
+        <id>7c9c34509350b2108543b2597bba10ba</id>
+        <sys_created_by>alishba.khan</sys_created_by>
+        <sys_created_on>2025-09-26 02:19:58</sys_created_on>
+        <sys_id>389c34509350b2108543b2597bba10bd</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_updated_by>alishba.khan</sys_updated_by>
+        <sys_updated_on>2025-09-26 02:19:58</sys_updated_on>
+        <table>sp_widget</table>
+        <use_es_latest>true</use_es_latest>
+    </sys_es_latest_script>
+</record_update>
